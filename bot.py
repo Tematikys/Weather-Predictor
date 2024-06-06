@@ -19,7 +19,7 @@ data = meteostat.Daily(location, start, end)
 data = data.fetch()
 
 
-bot = aiogram.Bot(token="TOKEN")
+bot = aiogram.Bot(token="7375447102:AAHweoNC8IpzKfGdK9507Q7ZNSbl2B9RoaA")
 dp = aiogram.Dispatcher()
 
 
@@ -40,9 +40,11 @@ def predict(data, models, window_size):
     for i, model in enumerate(models):
         features = extract_features(data, i, window_size).reshape(1, -1)
         last_date += datetime.timedelta(days=1)
-        prediction = pandas.DataFrame(model.predict(features), index=[last_date], columns=data.columns)
+        prediction = pandas.DataFrame(
+            model.predict(features), index=[last_date], columns=data.columns
+        )
         data = pandas.concat([data, prediction], axis=0)
-    return data[-len(models):]
+    return data[-len(models) :]
 
 
 def preprocess_data(data):
@@ -59,9 +61,7 @@ data = data[-365:]
 
 @dp.message(aiogram.filters.command.Command("start"))
 async def cmd_start(message: aiogram.types.Message):
-    kb = [
-        [aiogram.types.KeyboardButton(text="7-day forecast")]
-    ]
+    kb = [[aiogram.types.KeyboardButton(text="7-day forecast")]]
     keyboard = aiogram.types.ReplyKeyboardMarkup(keyboard=kb)
     await message.answer("Hello from HSE ML course!", reply_markup=keyboard)
 
@@ -71,13 +71,21 @@ async def predict(message: aiogram.types.Message):
     global data, models, end
 
     last_date = data.index[-1]
+    ans = pandas.DataFrame()
     for i, model in enumerate(models):
         features = extract_features(data, i, 7).reshape(1, -1)
         last_date += datetime.timedelta(days=1)
-        prediction = pandas.DataFrame(model.predict(features), index=[last_date], columns=data.columns)
-        data = pandas.concat([data, prediction], axis=0)
+        prediction = pandas.DataFrame(
+            model.predict(features), index=[last_date], columns=data.columns
+        )
+        ans = pandas.concat([ans, prediction], axis=0)
     await message.answer(
-        "\n".join([f"{(end + datetime.timedelta(days=1+i)).strftime('%Y-%m-%d')}: {e}" for i, e in enumerate(list(map(str, data[-len(models):].values[:, 0])))])
+        "\n".join(
+            [
+                f"{(end + datetime.timedelta(days=1+i)).strftime('%Y-%m-%d')}: {e}"
+                for i, e in enumerate(list(map(str, ans.values[:, 0])))
+            ]
+        )
     )
 
 
