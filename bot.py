@@ -62,13 +62,16 @@ data = data[-365:]
 
 @dp.message(aiogram.filters.command.Command("start"))
 async def cmd_start(message: aiogram.types.Message):
-    kb = [[aiogram.types.KeyboardButton(text="7-day forecast")]]
+    kb = [
+        [aiogram.types.KeyboardButton(text="1-day forecast")],
+        [aiogram.types.KeyboardButton(text="3-day forecast")],
+        [aiogram.types.KeyboardButton(text="7-day forecast")],
+    ]
     keyboard = aiogram.types.ReplyKeyboardMarkup(keyboard=kb)
     await message.answer("Hello from HSE ML course!", reply_markup=keyboard)
 
 
-@dp.message()
-async def predict(message: aiogram.types.Message):
+def get_prediction(cnt):
     global data, models, end
 
     last_date = data.index[-1]
@@ -80,14 +83,27 @@ async def predict(message: aiogram.types.Message):
             model.predict(features), index=[last_date], columns=data.columns
         )
         ans = pandas.concat([ans, prediction], axis=0)
-    await message.answer(
-        "\n".join(
-            [
-                f"{(end + datetime.timedelta(days=1+i)).strftime('%Y-%m-%d')}: {e}"
-                for i, e in enumerate(list(map(str, ans.values[:, 0])))
-            ]
-        )
+    return "\n".join(
+        [
+            f"{round(e, 1)} degrees is expected on {(end + datetime.timedelta(days=1+i)).strftime('%Y-%m-%d')}"
+            for i, e in enumerate(ans.values[:, 0][:cnt])
+        ]
     )
+
+
+@dp.message(aiogram.F.text == "1-day forecast")
+async def predict(message: aiogram.types.Message):
+    await message.answer(get_prediction(1))
+
+
+@dp.message(aiogram.F.text == "3-day forecast")
+async def predict(message: aiogram.types.Message):
+    await message.answer(get_prediction(3))
+
+
+@dp.message(aiogram.F.text == "7-day forecast")
+async def predict(message: aiogram.types.Message):
+    await message.answer(get_prediction(7))
 
 
 async def main():
