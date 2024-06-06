@@ -38,14 +38,9 @@ def get_weather_data(start, end):
             By.ID, "ctl00_MainContentHolder_butShowPastWeather"
         )
         submit_button.click()
-        try:
-            wait.until(
-                EC.presence_of_element_located((By.CLASS_NAME, "days-details-table"))
-            )
-        except TimeoutException:
-            # If the element is not found, move to the next date
-            date += datetime.timedelta(days=1)
-            continue
+        wait.until(
+            EC.presence_of_element_located((By.CLASS_NAME, "days-details-table"))
+        )
 
         page_source = driver.page_source
         soup = bs(page_source, "html.parser")
@@ -72,9 +67,15 @@ def get_weather_data(start, end):
     return data
 
 
-def main():
-    start_dates = [datetime.datetime(year, 1, 1) for year in range(2019, 2024)]
-    end_dates = [datetime.datetime(year + 1, 1, 1) for year in range(2019, 2024)]
+def fetch_data(left_year_bound, right_year_bound):
+    start_dates = [
+        datetime.datetime(year, 1, 1)
+        for year in range(left_year_bound, right_year_bound + 1)
+    ]
+    end_dates = [
+        datetime.datetime(year + 1, 1)
+        for year in range(left_year_bound, right_year_bound + 1)
+    ]
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = [
@@ -90,10 +91,6 @@ def main():
         ]
 
     result = pandas.concat(results)
-    result.reset_index(drop=True)
-    result.set_index("time")
-    print(result)
-
-
-if __name__ == "__main__":
-    main()
+    result.set_index("time", inplace=True)
+    result.sort_values(by="time", inplace=True)
+    return result
