@@ -6,6 +6,7 @@ import pandas
 import datetime
 import meteostat
 import numpy
+from settings import TOKEN
 
 
 file = open("model.pkl", "rb")
@@ -19,7 +20,7 @@ data = meteostat.Daily(location, start, end)
 data = data.fetch()
 
 
-bot = aiogram.Bot(token="7375447102:AAHweoNC8IpzKfGdK9507Q7ZNSbl2B9RoaA")
+bot = aiogram.Bot(token=TOKEN)
 dp = aiogram.Dispatcher()
 
 
