@@ -67,13 +67,13 @@ def get_weather_data(start, end):
     return data
 
 
-def fetch_data(left_year_bound, right_year_bound):
+def fetch_data(left_year_bound, right_year_bound, file_name):
     start_dates = [
         datetime.datetime(year, 1, 1)
         for year in range(left_year_bound, right_year_bound + 1)
     ]
     end_dates = [
-        datetime.datetime(year + 1, 1)
+        datetime.datetime(year + 1, 1, 1)
         for year in range(left_year_bound, right_year_bound + 1)
     ]
 
@@ -93,4 +93,10 @@ def fetch_data(left_year_bound, right_year_bound):
     result = pandas.concat(results)
     result.set_index("time", inplace=True)
     result.sort_values(by="time", inplace=True)
-    return result
+
+    result.to_csv(file_name)
+
+
+if __name__ == "__main__":
+    fetch_data(2014, 2017, "custom_dataset-1.csv")
+    fetch_data(2018, 2023, "custom_dataset-2.csv")
