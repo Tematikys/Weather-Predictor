@@ -10,13 +10,13 @@ from settings import TOKEN
 
 
 file = open("model.pkl", "rb")
-models = pickle.load(file)
+feature_scaler, target_scaler, models = pickle.load(file)
 file.close()
 
-start = datetime.datetime(2019, 1, 1)
-end = datetime.datetime.today()
+start_date = datetime.datetime(2014, 1, 1)
+end_date = datetime.datetime.today()
 location = meteostat.Point(59.938678, 30.314474)
-data = meteostat.Daily(location, start, end)
+data = meteostat.Daily(location, start_date, end_date)
 data = data.fetch()
 
 
@@ -24,39 +24,58 @@ bot = aiogram.Bot(token=TOKEN)
 dp = aiogram.Dispatcher()
 
 
-def extract_features(data: pandas.DataFrame, model_idx: int, window_size: int = 3):
-    global start
-
-    feature_window = window_size + model_idx
-    data = data[-feature_window:]
+def extract_features(data: pandas.DataFrame, model_idx: int, window_size: int = 15, mode: str = "hybrid"):
+    if mode == "hybrid":
+        feature_window = window_size + model_idx
+        data = data[-feature_window:]
+    elif mode == "recursive":
+        feature_window = window_size
+        data = data[-feature_window:]
+    elif mode == "direct":
+        feature_window = window_size
+        data = data[-feature_window:]["tavg"]
+        
     values = data.values.reshape(-1)
     date = data.index[-1] + datetime.timedelta(days=1 + model_idx)
-    day = (date - start).days
+    day = (date - start_date).days
     month = date.month
     return numpy.concatenate([values, [day, month]])
 
 
-def predict(data, models, window_size):
+def predict_tavg(data: pandas.DataFrame, models, target_scaler, window_size: int = 15, mode: str = "hybrid"):    
     last_date = data.index[-1]
+    predictions = pandas.Series()
+    
     for i, model in enumerate(models):
-        features = extract_features(data, i, window_size).reshape(1, -1)
+        features = extract_features(data, i, window_size, mode).reshape(1, -1)
         last_date += datetime.timedelta(days=1)
-        prediction = pandas.DataFrame(
-            model.predict(features), index=[last_date], columns=data.columns
-        )
-        data = pandas.concat([data, prediction], axis=0)
-    return data[-len(models) :]
+        if mode == "direct":
+            prediction = pandas.Series([model.predict(features)], index=[last_date])
+            predictions = pandas.concat([predictions, prediction], axis=0)
+        else:
+            prediction = pandas.DataFrame(model.predict(features), index=[last_date], columns=data.columns)
+            data = pandas.concat([data, prediction], axis=0)
+            predictions = pandas.concat([predictions, prediction["tavg"]], axis=0)
+
+    predictions.iloc[:] = target_scaler.inverse_transform(predictions.values.reshape(-1, 1)).reshape(-1)
+
+    return predictions
 
 
-def preprocess_data(data):
-    data = data.drop(["tsun", "tmin", "tmax"], axis=1)
-    data["snow"] = data["snow"].fillna(0)
+def preprocess_data(data, feature_scaler, target_scaler):
+    data = data.drop(["tsun", "tmin", "tmax", "snow"], axis=1)
     data["prcp"] = data["prcp"].fillna(0)
     data["wdir"] = data["wdir"].bfill().ffill().fillna(200)
+    
+    cols = list(data.columns.drop("tavg"))
+
+    data[cols] = feature_scaler.transform(data[cols])
+    data["tavg"] = target_scaler.transform(data["tavg"].values.reshape(-1, 1))
+    
     return data
 
 
-data = preprocess_data(data)
+data = preprocess_data(data, feature_scaler, target_scaler)
 data = data[-365:]
 
 
@@ -72,21 +91,14 @@ async def cmd_start(message: aiogram.types.Message):
 
 
 def get_prediction(cnt):
-    global data, models, end
-
-    last_date = data.index[-1]
-    ans = pandas.DataFrame()
-    for i, model in enumerate(models):
-        features = extract_features(data, i, 7).reshape(1, -1)
-        last_date += datetime.timedelta(days=1)
-        prediction = pandas.DataFrame(
-            model.predict(features), index=[last_date], columns=data.columns
-        )
-        ans = pandas.concat([ans, prediction], axis=0)
+    global data, models, target_scaler
+    
+    prediction = predict_tavg(data, models, target_scaler)
+    
     return "\n".join(
         [
-            f"{round(e, 1)} degrees is expected on {(end + datetime.timedelta(days=1+i)).strftime('%Y-%m-%d')}"
-            for i, e in enumerate(ans.values[:, 0][:cnt])
+            f"{round(e, 1)} degrees is expected on {(end_date + datetime.timedelta(days=1+i)).strftime('%Y-%m-%d')}"
+            for i, e in enumerate(prediction[:cnt])
         ]
     )
 
@@ -112,3 +124,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
